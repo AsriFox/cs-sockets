@@ -7,13 +7,12 @@ namespace CsSocketClient
 {
 	internal class Program
 	{
-		const string settingsLocation = "settings.xml";
 		static CsSockets.SettingsTable settings;
 		static bool locked = false;
 
 		static void Main(string[] args)
 		{
-			settings = CsSockets.Util.ConsoleStart(args, settingsLocation);
+			settings = CsSockets.Util.ConsoleStart(args);
 			try {
 				ClientObject.Instance.Connect(settings.Host, settings.Port);
 				Console.WriteLine($"Established connection with server at {settings.Host}:{settings.Port}");
@@ -33,6 +32,8 @@ namespace CsSocketClient
 					if (locked) {
 						Console.WriteLine("Waiting for connection...");
 						ClientObject.Instance.WaitForConnection();
+						Console.WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
+						locked = false;
 					}
 					ClientObject.Instance.SendMessage(message);
 				}

@@ -16,7 +16,7 @@ namespace CsSocketClient
 		private static ClientObject instance;
 		public static ClientObject Instance => instance ??= new();
 
-		readonly TcpClient client = new();
+		TcpClient client;
 		NetworkStream stream;
 
 		readonly ManualResetEventSlim stopEvent = new(false);
@@ -24,8 +24,13 @@ namespace CsSocketClient
 		public event Action<string> MessageReceived;
 		public event Action<string, bool> Disconnected;
 
+		private string _host;
+		private int _port;
 		public void Connect(string host, int port) 
 		{
+			_host = host;
+			_port = port;
+			client = new();
 			client.Connect(host, port);
 			stream = client.GetStream();
 		}
@@ -53,7 +58,25 @@ namespace CsSocketClient
 
 		public void Stop() => stopEvent.Reset();
 
-		public void WaitForConnection() => stopEvent.Wait();
+		public void WaitForConnection() {
+			Thread waitThread = new(TryReconnecting);
+			waitThread.Start();
+			stopEvent.Wait();
+		}
+
+		private void TryReconnecting()
+		{
+			while (!stopEvent.IsSet) {
+				Thread.Sleep(100);
+				try {
+					Connect(_host, _port);
+					Start();
+					SendMessage(userName);
+				}
+				catch (SocketException) {}
+				catch (InvalidOperationException) {}
+			}
+		}
 
 		private void ReceiveMessages()
 		{
