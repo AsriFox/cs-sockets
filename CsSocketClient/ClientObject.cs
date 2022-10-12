@@ -86,6 +86,8 @@ namespace CsSocketClient
 					StringBuilder builder = new("\r");
 					do {
 						var bytes = stream.Read(data, 0, data.Length);
+						if (bytes == 0)
+							throw new System.IO.IOException("Read nothing", new SocketException());
 						builder.Append(Encoding.Unicode.GetString(data, 0, bytes));
 					}
 					while (stream.DataAvailable && stopEvent.IsSet);
