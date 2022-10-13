@@ -8,34 +8,67 @@ namespace CsSocketClient
 	internal class Program
 	{
 		static CsSockets.SettingsTable settings;
-		static bool locked = false;
+		// static bool locked = false;
+		static Thread exchangeThread;
+		static UdpUser Client;
+		static string userName;
 
 		static void Main(string[] args)
 		{
 			settings = CsSockets.Util.ConsoleStart(args);
 			try {
-				ClientObject.Instance.Connect(settings.Host, settings.Port);
-				Console.WriteLine($"Established connection with server at {settings.Host}:{settings.Port}");
-				
+				//ClientObject.Instance.Connect(settings.Host, settings.Port);
+				//Console.WriteLine($"Established connection with server at {settings.Host}:{settings.Port}");
+
+				//Console.Write("Your name: ");
+				//ClientObject.Instance.UserName = Console.ReadLine();
+
+				//ClientObject.Instance.MessageReceived += OnMessageReceived;
+				//ClientObject.Instance.Disconnected += OnDisconnected;
+
+				//ClientObject.Instance.Start();
+				//Console.WriteLine($"Welcome, {ClientObject.Instance.UserName}!");
+
+				//while (true) {
+				//	Console.Write("> ");
+				//	string message = Console.ReadLine();
+				//	if (locked) {
+				//		Console.WriteLine("Waiting for connection...");
+				//		ClientObject.Instance.WaitForConnection();
+				//		Console.WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
+				//		locked = false;
+				//	}
+				//	ClientObject.Instance.SendMessage(message);
+				//}
+				Client = UdpUser.ConnectTo(settings.Host, settings.Port);
 				Console.Write("Your name: ");
-				ClientObject.Instance.UserName = Console.ReadLine();
+				userName = Console.ReadLine();
+				Client.Send("$userJoin " + userName);
+                exchangeThread = new((param) => {
+					if (param is not UdpUser client)
+						throw new InvalidCastException();
+					while (true) {
+						try {
+							var received = client.Receive();
+							if (!received.Message.StartsWith(userName))
+								Console.Write("\r" + received.Message + "\n> ");
+						}
+						catch (AggregateException agex) {
+							Console.WriteLine(agex.InnerException.Message);
+							if (agex.InnerException is SocketException)
+								return;
+						}
+						catch (Exception ex) {
+							Console.WriteLine(ex.Message);
+						}
+					}
+				});
+				exchangeThread.Start(Client);
 
-				ClientObject.Instance.MessageReceived += OnMessageReceived;
-				ClientObject.Instance.Disconnected += OnDisconnected;
-
-				ClientObject.Instance.Start();
-				Console.WriteLine($"Welcome, {ClientObject.Instance.UserName}!");
-				
+				Console.CancelKeyPress += OnConsoleCancel;
 				while (true) {
 					Console.Write("> ");
-					string message = Console.ReadLine();
-					if (locked) {
-						Console.WriteLine("Waiting for connection...");
-						ClientObject.Instance.WaitForConnection();
-						Console.WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
-						locked = false;
-					}
-					ClientObject.Instance.SendMessage(message);
+					Client.Send(userName + ": " + Console.ReadLine());
 				}
 			}
 			catch (Exception e) {
@@ -44,20 +77,22 @@ namespace CsSocketClient
 			}
 		}
 
+		static void OnConsoleCancel(object sender, ConsoleCancelEventArgs e) => Client.Send("$userLeft " + userName);
 
-		static void OnMessageReceived(string message)
-		{
-			Console.WriteLine(message);
-			Console.Write("> ");
-		}
 
-		static void OnDisconnected(string message, bool shutdown)
-		{
-			Console.WriteLine(message);
-			if (shutdown) Environment.Exit(0);
-			locked = true;
-			Console.WriteLine("Close the terminal or press 'Ctrl+C' to exit.");
-			Console.WriteLine("Press 'Enter' to wait for connection.");
-		}
+		//static void OnMessageReceived(string message)
+		//{
+		//	Console.WriteLine(message);
+		//	Console.Write("> ");
+		//}
+
+		//static void OnDisconnected(string message, bool shutdown)
+		//{
+		//	Console.WriteLine(message);
+		//	if (shutdown) Environment.Exit(0);
+		//	locked = true;
+		//	Console.WriteLine("Close the terminal or press 'Ctrl+C' to exit.");
+		//	Console.WriteLine("Press 'Enter' to wait for connection.");
+		//}
 	}
 }

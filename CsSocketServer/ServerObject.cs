@@ -14,49 +14,52 @@ namespace CsSocketServer
 		static ServerObject instance;
 		public static ServerObject Instance => instance ??= new();
 
-		TcpListener tcpListener;
+		UdpListener listener;
 		readonly List<ClientObject> clients = new();
 
-		protected internal void AddConnection(ClientObject client) => clients.Add(client);
+		// protected internal void AddConnection(ClientObject client) => clients.Add(client);
 
-		protected internal void RemoveConnection(string id) => clients.Remove(clients.FirstOrDefault(c => c.Id == id));
+		// protected internal void RemoveConnection(string id) => clients.Remove(clients.FirstOrDefault(c => c.Id == id));
 
 		protected internal void Listen(object parameter)
 		{
 			if (parameter is not int port)
 				throw new ArgumentException("Parameter must be of type 'int'", nameof(parameter));
 			try {
-				tcpListener = new(IPAddress.Any, port);
-				tcpListener.Start();
+                listener = new(new IPEndPoint(IPAddress.Any, port));
 				Console.WriteLine("Server is running.");
 
 				while (true) {
-					var tcpClient = tcpListener.AcceptTcpClient();
-					ClientObject client = new(tcpClient, this);
-					Thread clientThread = new(new ThreadStart(client.Process));
-					clientThread.Start();
+					var received = listener.Receive();
+					if (received.Message.Length > 10 && received.Message.StartsWith("$user")) {
+						string userName = received.Message[10..];
+						switch (received.Message[5..10]) {
+							case "Join ":
+								clients.Add(new(userName, received.Sender));
+                                BroadcastMessage($"{userName} joined the chat");
+                                listener.Reply($"Welcome to the server, {userName}!", received.Sender);
+                                continue;
+
+							case "Left ":
+                                clients.RemoveAll(client => client.UserName == userName && client.EndPoint.Equals(received.Sender));
+                                BroadcastMessage($"{userName} left the chat");
+                                continue;
+						}
+					}
+					BroadcastMessage(received.Message);
 				}
 			}
 			catch (Exception e) {
 				Console.WriteLine(e.Message);
-				Disconnect();
-			}
+                Environment.Exit(0);
+            }
 		}
 
-		protected internal void BroadcastMessage(string message, string id)
+		protected internal void BroadcastMessage(string message)
 		{
-			var data = Encoding.Unicode.GetBytes(message);
+			Console.WriteLine(message);
 			foreach (var client in clients)
-				if (client.Id != id)
-					client.Stream.Write(data, 0, data.Length);
-		}
-
-		protected internal void Disconnect()
-		{
-			tcpListener.Stop();
-			foreach (var client in clients)
-				client.Close();
-			Environment.Exit(0);
+                listener.Reply(message, client.EndPoint);
 		}
 	}
 }

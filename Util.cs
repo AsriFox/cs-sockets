@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Text;
 
 namespace CsSockets
 {
 	public static class Util
-	{
-		const string settingsDefaultLocation = "settings.xml";
+    {
+        const string settingsDefaultLocation = "settings.xml";
 
 		public static SettingsTable ConsoleStart(string[] args)
 		{

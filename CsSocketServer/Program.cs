@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Threading;
 
 namespace CsSocketServer
@@ -13,12 +14,26 @@ namespace CsSocketServer
 		{
 			settings = CsSockets.Util.ConsoleStart(args);
 			try {
-				listenThread = new Thread(ServerObject.Instance.Listen);
-				listenThread.Start(settings.Port);
-				Console.WriteLine($"Server started on port {settings.Port}");
-			}
+                //listenThread = new Thread(ServerObject.Instance.Listen);
+                //listenThread.Start(settings.Port);
+                //listenThread = new(async (param) => {
+                //	if (param is not UdpListener server)
+                //		throw new InvalidCastException();
+                //	while (true) {
+                //		var received = await server.Receive();
+                //		server.Reply("echo: " + received.Message, received.Sender);
+                //		if (received.Message == "quit")
+                //			break;
+                //	}
+                //});
+                //listenThread.Start(new UdpListener(new IPEndPoint(IPAddress.Any, settings.Port)));
+                // UdpListener server = new(new IPEndPoint(IPAddress.Any, settings.Port));
+                listenThread = new Thread(ServerObject.Instance.Listen);
+                listenThread.Start(settings.Port);
+                Console.WriteLine($"Server started on port {settings.Port}");
+            }
 			catch (Exception e) {
-				ServerObject.Instance.Disconnect();
+				// ServerObject.Instance.Disconnect();
 				Console.WriteLine(e.Message);
 			}
 		}
