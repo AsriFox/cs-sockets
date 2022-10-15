@@ -1,33 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-
-namespace CsSocketServer
+﻿namespace CsSocketServer
 {
-	internal class ServerObject
+    using System.Net;
+
+    internal struct ClientObject
+    {
+        public string UserName { get; private set; }
+        public IPEndPoint EndPoint { get; private set; }
+
+        public ClientObject(string userName, IPEndPoint endPoint)
+        {
+            UserName = userName;
+            EndPoint = endPoint;
+        }
+    }
+
+    internal class ServerObject
 	{
 		private ServerObject() {}
 		static ServerObject instance;
 		public static ServerObject Instance => instance ??= new();
 
-		UdpListener listener;
-		readonly List<ClientObject> clients = new();
+        public event System.Action<string> Write;
 
-		// protected internal void AddConnection(ClientObject client) => clients.Add(client);
-
-		// protected internal void RemoveConnection(string id) => clients.Remove(clients.FirstOrDefault(c => c.Id == id));
+        UdpListener listener;
+		readonly System.Collections.Generic.List<ClientObject> clients = new();
 
 		protected internal void Listen(object parameter)
 		{
 			if (parameter is not int port)
-				throw new ArgumentException("Parameter must be of type 'int'", nameof(parameter));
+				throw new System.ArgumentException("Parameter must be of type 'int'", nameof(parameter));
 			try {
                 listener = new(new IPEndPoint(IPAddress.Any, port));
-				Console.WriteLine("Server is running.");
+				Write?.Invoke("Server is running.");
 
 				while (true) {
 					var received = listener.Receive();
@@ -49,15 +53,15 @@ namespace CsSocketServer
 					BroadcastMessage(received.Message);
 				}
 			}
-			catch (Exception e) {
-				Console.WriteLine(e.Message);
-                Environment.Exit(0);
+			catch (System.Exception e) {
+                Write?.Invoke(e.Message);
+                System.Environment.Exit(0);
             }
 		}
 
 		protected internal void BroadcastMessage(string message)
 		{
-			Console.WriteLine(message);
+            Write?.Invoke(message);
 			foreach (var client in clients)
                 listener.Reply(message, client.EndPoint);
 		}

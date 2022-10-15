@@ -1,98 +1,56 @@
-﻿using System;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-
-namespace CsSocketClient
+﻿namespace CsSocketClient
 {
-	internal class Program
+    using static System.Console;
+
+    internal class Program
 	{
 		static CsSockets.SettingsTable settings;
-		// static bool locked = false;
-		static Thread exchangeThread;
-		static UdpUser Client;
-		static string userName;
+		static bool locked = false;
 
 		static void Main(string[] args)
 		{
 			settings = CsSockets.Util.ConsoleStart(args);
 			try {
-				//ClientObject.Instance.Connect(settings.Host, settings.Port);
-				//Console.WriteLine($"Established connection with server at {settings.Host}:{settings.Port}");
+				ClientObject.Instance.Connect(settings.Host, settings.Port);
+                WriteLine($"Communicating with server at {settings.Host}:{settings.Port}");
 
-				//Console.Write("Your name: ");
-				//ClientObject.Instance.UserName = Console.ReadLine();
+                Write("Your name: ");
+				ClientObject.Instance.UserName = ReadLine();
 
-				//ClientObject.Instance.MessageReceived += OnMessageReceived;
-				//ClientObject.Instance.Disconnected += OnDisconnected;
+				ClientObject.Instance.MessageReceived += OnMessageReceived;
+				ClientObject.Instance.Disconnected += OnDisconnected;
 
-				//ClientObject.Instance.Start();
-				//Console.WriteLine($"Welcome, {ClientObject.Instance.UserName}!");
+				ClientObject.Instance.Start();
+                CancelKeyPress += (_, _) => System.Environment.Exit(0);
+                System.AppDomain.CurrentDomain.ProcessExit += (_, _) => ClientObject.Instance.Dispose();
 
-				//while (true) {
-				//	Console.Write("> ");
-				//	string message = Console.ReadLine();
-				//	if (locked) {
-				//		Console.WriteLine("Waiting for connection...");
-				//		ClientObject.Instance.WaitForConnection();
-				//		Console.WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
-				//		locked = false;
-				//	}
-				//	ClientObject.Instance.SendMessage(message);
-				//}
-				Client = UdpUser.ConnectTo(settings.Host, settings.Port);
-				Console.Write("Your name: ");
-				userName = Console.ReadLine();
-				Client.Send("$userJoin " + userName);
-                exchangeThread = new((param) => {
-					if (param is not UdpUser client)
-						throw new InvalidCastException();
-					while (true) {
-						try {
-							var received = client.Receive();
-							if (!received.Message.StartsWith(userName))
-								Console.Write("\r" + received.Message + "\n> ");
-						}
-						catch (AggregateException agex) {
-							Console.WriteLine(agex.InnerException.Message);
-							if (agex.InnerException is SocketException)
-								return;
-						}
-						catch (Exception ex) {
-							Console.WriteLine(ex.Message);
-						}
-					}
-				});
-				exchangeThread.Start(Client);
-
-				Console.CancelKeyPress += OnConsoleCancel;
-				while (true) {
-					Console.Write("> ");
-					Client.Send(userName + ": " + Console.ReadLine());
-				}
+                while (true) {
+					Write("> ");
+					string message = ReadLine() ?? throw new System.OperationCanceledException("Cancelled");
+					if (locked) {
+                        WriteLine("Waiting for connection...");
+                        ClientObject.Instance.WaitForConnection();
+                        WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
+                        locked = false;
+                    }
+                    ClientObject.Instance.SendMessage(message);
+                }
 			}
-			catch (Exception e) {
-				Console.WriteLine(e.Message);
-				// ClientObject.Instance.Disconnect();
+            catch (System.OperationCanceledException) {}
+			catch (System.Exception e) {
+				WriteLine(e.Message);
 			}
 		}
 
-		static void OnConsoleCancel(object sender, ConsoleCancelEventArgs e) => Client.Send("$userLeft " + userName);
+        static void OnMessageReceived(string message) => Write("\r" + message + "\n> ");
 
-
-		//static void OnMessageReceived(string message)
-		//{
-		//	Console.WriteLine(message);
-		//	Console.Write("> ");
-		//}
-
-		//static void OnDisconnected(string message, bool shutdown)
-		//{
-		//	Console.WriteLine(message);
-		//	if (shutdown) Environment.Exit(0);
-		//	locked = true;
-		//	Console.WriteLine("Close the terminal or press 'Ctrl+C' to exit.");
-		//	Console.WriteLine("Press 'Enter' to wait for connection.");
-		//}
-	}
+        static void OnDisconnected(string message, bool shutdown)
+        {
+            WriteLine(message);
+            if (shutdown) System.Environment.Exit(0);
+            locked = true;
+            WriteLine("Close the terminal or press 'Ctrl+C' to exit.");
+            WriteLine("Press 'Enter' to wait for connection.");
+        }
+    }
 }

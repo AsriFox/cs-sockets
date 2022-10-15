@@ -1,24 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CsSockets
+﻿namespace CsSockets
 {
     public struct Received
     {
-        public IPEndPoint Sender;
+        public System.Net.IPEndPoint Sender;
         public string Message;
     }
 
     public abstract class UdpBase
     {
-        public static readonly Encoding Encod = Encoding.Unicode;
+        public static readonly System.Text.Encoding Encod = System.Text.Encoding.Unicode;
 
-        protected UdpClient Client = new();
+        protected System.Net.Sockets.UdpClient Client = new();
 
         // public async Task<Received> Receive()
         public Received Receive()

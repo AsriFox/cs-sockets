@@ -1,25 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace CsSocketClient
+﻿namespace CsSocketClient
 {
+	using System;
+
 	internal class ClientObject : IDisposable
 	{
-		public static readonly Encoding Encod = Encoding.Unicode;
-
 		private ClientObject() {}
 		private static ClientObject instance;
 		public static ClientObject Instance => instance ??= new();
 
-		TcpClient client;
-		NetworkStream stream;
+		UdpUser client;
 
-		readonly ManualResetEventSlim stopEvent = new(false);
+		readonly System.Threading.ManualResetEventSlim stopEvent = new(false);
 
 		public event Action<string> MessageReceived;
 		public event Action<string, bool> Disconnected;
@@ -30,19 +21,18 @@ namespace CsSocketClient
 		{
 			_host = host;
 			_port = port;
-			client = new();
-			client.Connect(host, port);
-			stream = client.GetStream();
+			client = UdpUser.ConnectTo(host, port);
 		}
 
-		private string userName;
+		private string userName = null;
 		public string UserName {
 			get => userName;
 			set {
+				if (userName is not null)
+					throw new InvalidOperationException("User name cannot be changed while connected!");
 				userName = value;
-				byte[] data = Encod.GetBytes(userName);
-				stream.Write(data, 0, data.Length);
-			}
+                client.Send("$userJoin " + userName);
+            }
 		}
 
 		public void Start()
@@ -51,7 +41,7 @@ namespace CsSocketClient
 				Disconnected?.Invoke("The thread is already running!", false);
 				return;
 			}
-			Thread receiveThread = new(ReceiveMessages);
+			System.Threading.Thread receiveThread = new(ReceiveMessages);
 			stopEvent.Set();
 			receiveThread.Start();
 		}
@@ -59,7 +49,7 @@ namespace CsSocketClient
 		public void Stop() => stopEvent.Reset();
 
 		public void WaitForConnection() {
-			Thread waitThread = new(TryReconnecting);
+            System.Threading.Thread waitThread = new(TryReconnecting);
 			waitThread.Start();
 			stopEvent.Wait();
 		}
@@ -67,13 +57,13 @@ namespace CsSocketClient
 		private void TryReconnecting()
 		{
 			while (!stopEvent.IsSet) {
-				Thread.Sleep(100);
+                System.Threading.Thread.Sleep(100);
 				try {
 					Connect(_host, _port);
 					Start();
 					SendMessage(userName);
 				}
-				catch (SocketException) {}
+				catch (System.Net.Sockets.SocketException) {}
 				catch (InvalidOperationException) {}
 			}
 		}
@@ -82,42 +72,27 @@ namespace CsSocketClient
 		{
 			while (stopEvent.IsSet) {
 				try {
-					var data = new byte[64];
-					StringBuilder builder = new("\r");
-					do {
-						var bytes = stream.Read(data, 0, data.Length);
-						if (bytes == 0)
-							throw new System.IO.IOException("Read nothing", new SocketException());
-						builder.Append(Encoding.Unicode.GetString(data, 0, bytes));
-					}
-					while (stream.DataAvailable && stopEvent.IsSet);
-					MessageReceived?.Invoke(builder.ToString());
+                    var received = client.Receive();
+                    if (!received.Message.StartsWith(userName))
+                        MessageReceived?.Invoke(received.Message);
 				}
-				catch (System.IO.IOException e) {
-					if (e.InnerException is not SocketException)
-						throw new Exception(e.Message);
+				catch (System.Net.Sockets.SocketException) {
 					Disconnected?.Invoke("\rConnection to server was lost!", false);
 					Disconnect();
 					return;
 				}
 				catch (Exception e) {
 					Disconnected?.Invoke(e.Message, true);
-					// Disconnect();
 				}
 			}
 		}
 
-		public void SendMessage(string message)
-		{
-			byte[] data = Encoding.Unicode.GetBytes(message);
-			stream.Write(data, 0, data.Length);
-		}
+		public void SendMessage(string message) => client.Send($"{userName}: {message}");
 
 		public void Disconnect()
 		{
 			Stop();
-			stream?.Close();
-			client?.Close();
+			client.Send("$userLeft " + userName);
 		}
 
 		public void Dispose()
