@@ -5,38 +5,37 @@
     internal class Program
 	{
 		static CsSockets.SettingsTable settings;
+        static ClientObject client;
 		static bool locked = false;
 
 		static void Main(string[] args)
 		{
 			settings = CsSockets.Util.ConsoleStart(args);
 			try {
-				ClientObject.Instance.Connect(settings.Host, settings.Port);
+                Write("Your name: ");
+                client = new(settings.Host, settings.Port, ReadLine());
                 WriteLine($"Communicating with server at {settings.Host}:{settings.Port}");
 
-                Write("Your name: ");
-				ClientObject.Instance.UserName = ReadLine();
+                client.MessageReceived += OnMessageReceived;
+                client.Disconnected += OnDisconnected;
+                client.Start();
 
-				ClientObject.Instance.MessageReceived += OnMessageReceived;
-				ClientObject.Instance.Disconnected += OnDisconnected;
-
-				ClientObject.Instance.Start();
                 CancelKeyPress += (_, _) => System.Environment.Exit(0);
-                System.AppDomain.CurrentDomain.ProcessExit += (_, _) => ClientObject.Instance.Dispose();
+                System.AppDomain.CurrentDomain.ProcessExit += (_, _) => client.Dispose();
 
                 while (true) {
-					Write("> ");
 					string message = ReadLine() ?? throw new System.OperationCanceledException("Cancelled");
 					if (locked) {
                         WriteLine("Waiting for connection...");
-                        ClientObject.Instance.WaitForConnection();
-                        WriteLine($"Connection restored. Welcome back, {ClientObject.Instance.UserName}!");
+                        client.WaitForConnection();
+                        WriteLine($"\rConnection restored. Welcome back, {client.UserName}!");
                         locked = false;
                     }
-                    ClientObject.Instance.SendMessage(message);
+                    else client.SendMessage(message);
+                    Write("> ");
                 }
 			}
-            catch (System.OperationCanceledException) {}
+            // catch (System.OperationCanceledException) {}
 			catch (System.Exception e) {
 				WriteLine(e.Message);
 			}

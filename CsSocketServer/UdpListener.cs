@@ -13,10 +13,10 @@
             Client = new(endPoint);
         }
 
-        public void Reply(string message, IPEndPoint endPoint)
+        public void Reply(byte[] message, IPEndPoint endPoint)
         {
-            var datagram = Encod.GetBytes(message);
-            Client.Send(datagram, datagram.Length, endPoint);
+            //var datagram = Encod.GetBytes(message);
+            Client.Send(message, message.Length, endPoint);
         }
     }
 }

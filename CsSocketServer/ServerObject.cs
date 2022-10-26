@@ -1,69 +1,110 @@
 ﻿namespace CsSocketServer
 {
-    using System.Net;
+	using System;
+	using System.Linq;
+	using System.Net;
 
-    internal struct ClientObject
+	internal struct ClientObject
     {
+		public Guid Id { get; private set; }
         public string UserName { get; private set; }
         public IPEndPoint EndPoint { get; private set; }
 
         public ClientObject(string userName, IPEndPoint endPoint)
         {
+			Id = Guid.NewGuid();
             UserName = userName;
             EndPoint = endPoint;
         }
     }
 
-    internal class ServerObject
+    internal class ServerObject : IDisposable
 	{
 		private ServerObject() {}
 		static ServerObject instance;
 		public static ServerObject Instance => instance ??= new();
 
-        public event System.Action<string> Write;
+        public event Action<string> Write;
 
         UdpListener listener;
 		readonly System.Collections.Generic.List<ClientObject> clients = new();
+		
+		static byte[] EncodeMessage(Guid id, string mess)
+        {
+            byte[] dataId = id.ToByteArray();
+            byte[] dataMsg = CsSockets.UdpBase.Encod.GetBytes(mess);
+            byte[] datagram = new byte[dataId.Length + dataMsg.Length];
+            dataId.CopyTo(datagram, 0);
+            dataMsg.CopyTo(datagram, dataId.Length);
+            return datagram;
+        }
 
-		protected internal void Listen(object parameter)
+        protected internal void Listen(object parameter)
 		{
 			if (parameter is not int port)
-				throw new System.ArgumentException("Parameter must be of type 'int'", nameof(parameter));
+				throw new ArgumentException("Parameter must be of type 'int'", nameof(parameter));
 			try {
                 listener = new(new IPEndPoint(IPAddress.Any, port));
 				Write?.Invoke("Server is running.");
 
 				while (true) {
 					var received = listener.Receive();
-					if (received.Message.Length > 10 && received.Message.StartsWith("$user")) {
-						string userName = received.Message[10..];
-						switch (received.Message[5..10]) {
-							case "Join ":
-								clients.Add(new(userName, received.Sender));
-                                BroadcastMessage($"{userName} joined the chat");
-                                listener.Reply($"Welcome to the server, {userName}!", received.Sender);
-                                continue;
+					Guid idr = new(received.Datagram[..16]);
+                    string message = CsSockets.UdpBase.Encod.GetString(received.Datagram[16..]);
+					try {
+						var client = clients.First(c => c.Id == idr);
 
-							case "Left ":
-                                clients.RemoveAll(client => client.UserName == userName && client.EndPoint.Equals(received.Sender));
-                                BroadcastMessage($"{userName} left the chat");
-                                continue;
-						}
+						// User with this id exists
+						if (message.StartsWith("$userLeft")) {
+							if (clients.Remove(client)) {
+                                message = $"{client.UserName} left the chat";
+                                Write?.Invoke(message);
+                                BroadcastMessage(EncodeMessage(client.Id, message));
+                            }
+                        }
+						else {
+                            Write?.Invoke(message);
+                            BroadcastMessage(received.Datagram);
+                        }
 					}
-					BroadcastMessage(received.Message);
+					catch (InvalidOperationException) {
+						// No user with this id exists
+						if (!message.StartsWith("$userJoin ")) continue;
+
+                        // Try adding
+						ClientObject client = new(message[10..], received.Sender);
+						clients.Add(client);
+
+                        listener.Reply(
+                            EncodeMessage(
+                                client.Id,
+                                $"Welcome to the server, {client.UserName}!"),
+                            client.EndPoint);
+                        // System.Threading.Thread.Sleep(100);
+
+                        message = $"{client.UserName} joined the chat";
+                        Write?.Invoke(message);
+                        BroadcastMessage(EncodeMessage(client.Id, message));
+                    }
 				}
 			}
-			catch (System.Exception e) {
+			catch (Exception e) {
                 Write?.Invoke(e.Message);
-                System.Environment.Exit(0);
+                Environment.Exit(0);
             }
 		}
 
-		protected internal void BroadcastMessage(string message)
+		protected internal void BroadcastMessage(byte[] message)
 		{
-            Write?.Invoke(message);
 			foreach (var client in clients)
                 listener.Reply(message, client.EndPoint);
 		}
+
+        public void Dispose()
+        {
+            if (listener is null) return;
+            // Notify users about the server shutdown:
+            BroadcastMessage(EncodeMessage(Guid.Empty, "$serverShutdown"));
+        }
 	}
 }

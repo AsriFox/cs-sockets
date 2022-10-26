@@ -11,10 +11,11 @@
             return connection;
         }
 
-        public void Send(string message)
+        // public void Send(string message)
+        public void Send(byte[] message)
         {
-            var datagram = Encod.GetBytes(message);
-            Client.Send(datagram, datagram.Length);
+            // var datagram = Encod.GetBytes(message);
+            Client.Send(message, message.Length);
         }
     }
 }

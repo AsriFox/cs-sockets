@@ -10,14 +10,20 @@
 		static void Main(string[] args)
 		{
 			settings = CsSockets.Util.ConsoleStart(args);
-			try {
+            try {
+				CancelKeyPress += (_, _) => System.Environment.Exit(0);
+				System.AppDomain.CurrentDomain.ProcessExit += (_, _) => ServerObject.Instance.Dispose();
+
                 listenThread = new(ServerObject.Instance.Listen);
                 listenThread.Start(settings.Port);
                 WriteLine($"Server started on port {settings.Port}");
+				ServerObject.Instance.Write += OnWrite;
             }
 			catch (System.Exception e) {
 				WriteLine(e.Message);
 			}
 		}
+
+		static void OnWrite(string message) => WriteLine(message);
 	}
 }

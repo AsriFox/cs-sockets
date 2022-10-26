@@ -1,38 +1,28 @@
 ﻿namespace CsSocketClient
 {
 	using System;
+	using System.Linq;
 
 	internal class ClientObject : IDisposable
 	{
-		private ClientObject() {}
-		private static ClientObject instance;
-		public static ClientObject Instance => instance ??= new();
+        private readonly System.Threading.ManualResetEventSlim stopEvent = new(false);
+        private readonly string _host;
+        private readonly int _port;
 
-		UdpUser client;
-
-		readonly System.Threading.ManualResetEventSlim stopEvent = new(false);
-
-		public event Action<string> MessageReceived;
+        public event Action<string> MessageReceived;
 		public event Action<string, bool> Disconnected;
 
-		private string _host;
-		private int _port;
-		public void Connect(string host, int port) 
+        private UdpUser client;
+        public Guid Id { get; private set; } = Guid.Empty;
+        public string UserName { get; private set; }
+
+        public ClientObject(string host, int port, string userName) 
 		{
 			_host = host;
 			_port = port;
 			client = UdpUser.ConnectTo(host, port);
-		}
 
-		private string userName = null;
-		public string UserName {
-			get => userName;
-			set {
-				if (userName is not null)
-					throw new InvalidOperationException("User name cannot be changed while connected!");
-				userName = value;
-                client.Send("$userJoin " + userName);
-            }
+			UserName = userName;
 		}
 
 		public void Start()
@@ -41,7 +31,20 @@
 				Disconnected?.Invoke("The thread is already running!", false);
 				return;
 			}
-			System.Threading.Thread receiveThread = new(ReceiveMessages);
+
+			// Notify the server of the new user joining:
+            client.Send(EncodeMessage("$userJoin " + UserName));
+
+			// Receive the assigned GUID from the server:
+            var response = client.Receive();
+            Id = new Guid(response.Datagram[..16]);
+            string message = CsSockets.UdpBase.Encod.GetString(response.Datagram[16..]);
+
+			// Print the greeting:
+            MessageReceived?.Invoke(message);
+
+			// Start receiving messages:
+            System.Threading.Thread receiveThread = new(ReceiveMessages);
 			stopEvent.Set();
 			receiveThread.Start();
 		}
@@ -57,12 +60,11 @@
 		private void TryReconnecting()
 		{
 			while (!stopEvent.IsSet) {
-                System.Threading.Thread.Sleep(100);
+                System.Threading.Thread.Sleep(1000);
 				try {
-					Connect(_host, _port);
-					Start();
-					SendMessage(userName);
-				}
+					client = UdpUser.ConnectTo(_host, _port);
+                    Start();
+                }
 				catch (System.Net.Sockets.SocketException) {}
 				catch (InvalidOperationException) {}
 			}
@@ -72,13 +74,18 @@
 		{
 			while (stopEvent.IsSet) {
 				try {
-                    var received = client.Receive();
-                    if (!received.Message.StartsWith(userName))
-                        MessageReceived?.Invoke(received.Message);
+					var data = client.Receive().Datagram;
+					var message = DecodeMessage(data);
+					if (message is not null) {
+						if (new Guid(data.Take(16).ToArray()) == Guid.Empty && message == "$serverShutdown") {
+							Disconnect("Server was shut down.");
+							return;
+						}
+						MessageReceived?.Invoke(message);
+					}
 				}
 				catch (System.Net.Sockets.SocketException) {
-					Disconnected?.Invoke("\rConnection to server was lost!", false);
-					Disconnect();
+					Disconnect("Connection to server was lost!");
 					return;
 				}
 				catch (Exception e) {
@@ -87,17 +94,35 @@
 			}
 		}
 
-		public void SendMessage(string message) => client.Send($"{userName}: {message}");
-
-		public void Disconnect()
+		protected string DecodeMessage(byte[] datagram)
 		{
+			if (new Guid(datagram[..16]) == Id) return null;
+			return CsSockets.UdpBase.Encod.GetString(datagram[16..]);
+		}
+
+		protected byte[] EncodeMessage(string message)
+        {
+			byte[] dataId = Id.ToByteArray();
+			byte[] dataMsg = CsSockets.UdpBase.Encod.GetBytes(message);
+			byte[] datagram = new byte[dataId.Length + dataMsg.Length];
+			dataId.CopyTo(datagram, 0);
+			dataMsg.CopyTo(datagram, dataId.Length);
+			return datagram;
+        }
+
+        public void SendMessage(string message) => client.Send(EncodeMessage($"{UserName}: {message}"));
+
+        public void Disconnect(string message)
+		{
+			if (message is not null)
+				Disconnected?.Invoke("\r" + message, false);
 			Stop();
-			client.Send("$userLeft " + userName);
+			client.Send(EncodeMessage("$userLeft " + UserName));
 		}
 
 		public void Dispose()
 		{
-			Disconnect();
+			Disconnect(null);
 		}
 	}
 }

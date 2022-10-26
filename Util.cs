@@ -1,8 +1,9 @@
 ﻿namespace CsSockets
 {
-	using static System.Console;
+    using System.Linq;
+    using static System.Console;
 
-	public static class Util
+    public static class Util
     {
         const string settingsDefaultLocation = "settings.xml";
 

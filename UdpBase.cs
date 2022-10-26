@@ -1,27 +1,38 @@
 ﻿namespace CsSockets
 {
+    using System.Net;
+    using System.Net.Sockets;
+
     public struct Received
     {
-        public System.Net.IPEndPoint Sender;
-        public string Message;
+        public IPEndPoint Sender;
+        public byte[] Datagram;
     }
 
     public abstract class UdpBase
     {
         public static readonly System.Text.Encoding Encod = System.Text.Encoding.Unicode;
 
-        protected System.Net.Sockets.UdpClient Client = new();
+        protected UdpClient Client = new();
 
         // public async Task<Received> Receive()
-        public Received Receive()
+        public Received Receive(bool timeout = false)
         {
             //var result = await Client.ReceiveAsync();
-            var t = Client.ReceiveAsync();
-            t.Wait();
-            return new Received {
-                Sender = t.Result.RemoteEndPoint,
-                Message = Encod.GetString(t.Result.Buffer)
-            };
+            var t = Client.BeginReceive(null, null);
+            if (timeout)
+                t.AsyncWaitHandle.WaitOne(System.TimeSpan.FromSeconds(1));
+            else t.AsyncWaitHandle.WaitOne();
+
+            if (t.IsCompleted) {
+                IPEndPoint remote = null;
+                byte[] data = Client.EndReceive(t, ref remote);
+                return new Received {
+                    Sender = remote,
+                    Datagram = data
+                };
+            }
+            else throw new SocketException((int)SocketError.TimedOut);
         }
     }
 }
