@@ -4,10 +4,10 @@
     {
         private UdpUser() {}
 
-        public static UdpUser ConnectTo(string hostName, int port)
+        public static UdpUser ConnectTo(string hostName, int portSend, int portReceive)
         {
             UdpUser connection = new();
-            connection.Client.Connect(hostName, port);
+            connection.Client.Connect(hostName, portSend);
             return connection;
         }
 

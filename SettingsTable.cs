@@ -7,7 +7,8 @@
 	public class SettingsTable
 	{
 		public string Host;
-		public int Port;
+		public int ReadPort;
+		public int WritePort;
 
 		public static void Write(SettingsTable table, string filename)
 		{

@@ -1,6 +1,5 @@
 ﻿namespace CsSockets
 {
-    using System.Linq;
     using static System.Console;
 
     public static class Util
@@ -20,8 +19,10 @@
 							return settings;
 						goto user_input;
 					}
-					Write("Port: ");
-					settings.Port = int.Parse(ReadLine());
+					Write("Incoming port (read):  ");
+					settings.ReadPort = int.Parse(ReadLine());
+					Write("Outgoing port (write): ");
+					settings.WritePort = int.Parse(ReadLine());
 					goto persist;
 
 				case 1:
@@ -32,16 +33,25 @@
 					WriteLine("Configuration file not found.");
 					Write("Host name: ");
 					settings.Host = ReadLine();
-					Write("Port: ");
-					settings.Port = int.Parse(ReadLine());
-					goto persist;
+                    Write("Incoming port (read):  ");
+                    settings.ReadPort = int.Parse(ReadLine());
+                    Write("Outgoing port (write): ");
+                    settings.WritePort = int.Parse(ReadLine());
+                    goto persist;
 
 				case 2:
+					throw new System.ArgumentException("Not enough arguments: expected 3 (Host name, Incoming port, Outgoing port), got 2");
+
 				case 3:
-					settings = new() { Host = args[0], Port = int.Parse(args[1]) };
+				case 4:
+					settings = new() { 
+						Host = args[0], 
+						ReadPort = int.Parse(args[1]), 
+						WritePort = int.Parse(args[2]) 
+					};
 				persist:
 					try {
-						string settingsLocation = args.Length > 2 ? args[2] : settingsDefaultLocation;
+						string settingsLocation = args.Length > 3 ? args[3] : settingsDefaultLocation;
 						settings.Write(settingsLocation);
 						WriteLine($"Settings written to '{settingsLocation}'.");
 					}
@@ -51,7 +61,7 @@
 					return settings;
 
 				default:
-					throw new System.ArgumentOutOfRangeException(nameof(args), $"Too many arguments ({args.Length}): expected no more than 3");
+					throw new System.ArgumentOutOfRangeException(nameof(args), $"Too many arguments ({args.Length}): expected no more than 4");
 			}
 		}
 	}

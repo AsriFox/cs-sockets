@@ -4,19 +4,19 @@
 
     internal class UdpListener : CsSockets.UdpBase
     {
-        // private IPEndPoint _listenOn;
+        private readonly IPEndPoint listenOn;
+        private readonly IPEndPoint replyOn;
 
-        public UdpListener(IPEndPoint endPoint)
+        public UdpListener(IPAddress host, int portListen, int portReply)
         {
-            // _listenOn = endPoint;
-            // Client = new(_listenOn);
-            Client = new(endPoint);
+            listenOn = new(host, portListen);
+            replyOn = new(host, portReply);
+            Client = new(listenOn);
         }
 
-        public void Reply(byte[] message, IPEndPoint endPoint)
+        public void Reply(byte[] message, IPEndPoint endPoint = null)
         {
-            //var datagram = Encod.GetBytes(message);
-            Client.Send(message, message.Length, endPoint);
+            Client.Send(message, message.Length, endPoint ?? replyOn);
         }
     }
 }
