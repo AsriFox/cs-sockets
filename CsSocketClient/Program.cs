@@ -1,69 +1,53 @@
 ﻿namespace CsSocketClient
 {
     using System;
-    using static System.Console;
+    using CsSockets;
+	using static System.Console;
 
     internal class Program
 	{
-		static CsSockets.SettingsTable settings;
-        static ClientObject client;
+		static string GetLine() => ReadLine() ?? throw new OperationCanceledException("Cancelled");
+
+		static SettingsTable settings;
+		static string userName;
 
 		static void Main(string[] args)
 		{
-            WriteLine("For multicast: use addresses from 224.0.0.0 to 239.255.255.255");
-			settings = CsSockets.Util.ConsoleStart(args);
+			try {
+				settings = Util.ConsoleStart(args);
 
-            Write("Your name: ");
-            client = new(settings.Host, settings.ReadPort, settings.WritePort, ReadLine());
+				Write("Your name: ");
+				userName = GetLine();
 
-            CancelKeyPress += OnCancelKeyPress;
-            AppDomain.CurrentDomain.ProcessExit += (_, _) => client.Dispose();
-            client.MessageReceived += OnMessageReceived;
-            client.Disconnected += OnDisconnected;
-
-            client.Start();
-            try {
-                while (true) {
-                    client.SendMessage($"{client.UserName}: {ReadLine()}");
-                }
+				System.Threading.Thread receiveThread = new(ReceiveMessages);
+                receiveThread.Start();
+                SendMessages();
             }
             catch (Exception ex) {
                 WriteLine(ex.Message);
-                Environment.Exit(0);
             }
-		}
-
-        static void OnMessageReceived(string message) => Write("\r" + message + "\n> ");
-
-        static void OnDisconnected(string message, bool shutdown)
-        {
-            WriteLine(message);
-            if (shutdown) Environment.Exit(0);
-            // locked = true;
-            WriteLine("Close the terminal or press 'Ctrl+C' to exit.\nPress 'Enter' to wait for connection.");
         }
 
-        static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+		static void SendMessages()
         {
-            if (client is not null && client.IsRunning) // && !locked)
-            {
-                WriteLine("\rExit? [y/n]: ");
-                switch (ReadKey().Key) 
-                {
-                    case ConsoleKey.Y:
-                        client.SendMessage($"\r{client.UserName} has left the server.");
-                        break;
-                    case ConsoleKey.N:
-                        Write("\r> ");
-                        return;
-                    default:
-                        Write("\nUnknown option. Resuming in 1s.");
-                        System.Threading.Thread.Sleep(1000);
-                        Write("\r> ");
-                        return;
-                }
+            UdpSender sender = new(settings.Host, settings.WritePort);
+            while (true) {
+                Write("> ");
+                sender.Send($"{userName}: {GetLine()}");
             }
-            Environment.Exit(0);
+        }
+
+        static void ReceiveMessages()
+        {
+            UdpReceiver receiver = new(settings.Host, settings.ReadPort);
+            var remoteAddress = System.Net.IPAddress.Parse(settings.Host);
+            System.Net.IPEndPoint? remoteEp = null;
+            while (true) {
+                byte[] data = receiver.Receive(ref remoteEp);
+                if (!remoteEp.Address.Equals(remoteAddress))
+                    continue;   // Receive only messages from the server;
+                WriteLine($"\r{Util.encoding.GetString(data)}> ");
+            }
         }
     }
 }

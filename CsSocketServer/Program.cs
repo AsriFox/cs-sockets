@@ -1,47 +1,49 @@
 ﻿namespace CsSocketServer
 {
-	using System.Net;
-	using System.Net.Sockets;
+	using System;
+	using CsSockets;
 	using static System.Console;
 
     internal class Program
 	{
-		static CsSockets.SettingsTable settings;
-		static System.Threading.Thread listenThread;
-		// static ServerObject server;
+		static SettingsTable settings;
 
 		static void Main(string[] args)
 		{
 			WriteLine("This server uses the hostname to broadcast messages.\nPlease, enter a broadcast address for the subnet (e.g. 192.168.0.255).");
-			settings = CsSockets.Util.ConsoleStart(args);
+			settings = Util.ConsoleStart(args);
+
+			UdpSender sender = new(settings.Host, settings.ReadPort);
+			UdpReceiver receiver = new(settings.WritePort);
+
+			// Send echo for calibration:
+            System.Net.IPEndPoint? remoteEp = null;
+			var id = Guid.NewGuid();
+			sender.Send(id.ToByteArray()).Wait();
+			byte[] data = receiver.Receive(ref remoteEp);
+			if (new Guid(data) != id)
+				throw new OperationCanceledException("Unable to retrieve local IP endpoint");
+
+            // Retrieve local IP endpoint:
+            System.Net.IPEndPoint localEp = remoteEp;
+            WriteLine($"Server is open at {settings.Host}:{settings.ReadPort}");
+
             try {
-				//CancelKeyPress += (_, _) => System.Environment.Exit(0);
-				//System.AppDomain.CurrentDomain.ProcessExit += (_, _) => ServerObject.Instance.Dispose();
-				//server = new(settings.Host, settings.ReadPort);
+                while (true) {
+					data = receiver.Receive(ref remoteEp);
 
-				//listenThread = new(ServerObject.Instance.Listen);
-				//listenThread.Start(settings.Port);
-				listenThread = new(Listen);
-				listenThread.Start();
-                WriteLine($"Server is open at {settings.Host}:{settings.ReadPort}");
-				//server.Write += OnWrite;
+					// Discard loopback messages:
+					if (remoteEp.Equals(localEp)) continue;
+
+					string message = Util.encoding.GetString(data);
+					WriteLine(message);
+
+					// Rebroadcast messages:
+					sender.Send(data);
+				}
             }
-			catch (System.Exception e) {
+			catch (Exception e) {
 				WriteLine(e.Message);
-			}
-		}
-
-		// static void OnWrite(string message) => WriteLine(message);
-
-		static void Listen()
-		{
-			UdpClient listener = new() { ExclusiveAddressUse = false, MulticastLoopback = true };
-			UdpClient sender = new(settings.Host, settings.ReadPort);
-			IPEndPoint listenEp = null;
-			while (true) {
-				byte[] data = listener.Receive(ref listenEp);
-				WriteLine(CsSockets.UdpBase.Encod.GetString(data[16..]));
-				sender.Send(data, data.Length);
 			}
 		}
 	}

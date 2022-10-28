@@ -4,6 +4,8 @@
 
     public static class Util
     {
+		public readonly static System.Text.Encoding encoding = System.Text.Encoding.Unicode;
+
         const string settingsDefaultLocation = "settings.xml";
 
 		public static SettingsTable ConsoleStart(string[] args)
